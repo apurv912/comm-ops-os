@@ -1,4 +1,4 @@
-===== COPY START: README.md =====
+
 # Communication Ops OS (ComOps) — v0.1 (Runnable Foundation)
 
 Local-first “communication operations mini-OS” for tracking outreach interactions and later converting them into tasks + reporting.  
