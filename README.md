@@ -1,4 +1,9 @@
+<<<<<<< HEAD
 # Communication Ops OS (ComOps) — v0 (Local-first)
+=======
+
+# Communication Ops OS (ComOps) — v0.1 (Runnable Foundation)
+>>>>>>> origin/main
 
 A local-first “communication operations mini-OS” that stores outreach events and later turns them into tasks + reporting.
 
@@ -42,4 +47,3 @@ python3 -m pip install -r requirements.txt
 # optional
 cp .env.example .env
 
-python3 -m streamlit run app.py
