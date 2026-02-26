@@ -1,92 +1,45 @@
-===== COPY START: README.md =====
-# Communication Ops OS (ComOps) — v0.1 (Runnable Foundation)
+# Communication Ops OS (ComOps) — v0 (Local-first)
 
-Local-first “communication operations mini-OS” for tracking outreach interactions and later converting them into tasks + reporting.  
-Built to be **engine-ready** for a future PR Outreach OS (PRO).
+A local-first “communication operations mini-OS” that stores outreach events and later turns them into tasks + reporting.
+
+## Product idea (PM framing)
+**Problem:** Outreach work (PR, partnerships, sales, recruiting) gets messy fast — follow-ups are missed, context is scattered, and reporting becomes manual.  
+**Goal:** Build a small, reusable engine that records *communication events* and later converts them into tasks + reporting.
+
+### Core decision (important)
+We store **Interaction** (channel-aware event), not “Message”.
+- Email is just: `Interaction where channel="email"`
+- Later, WhatsApp/calls are also Interactions (same engine).
+
+This keeps the core engine reusable for future **PR Outreach OS (PRO)**.
 
 ---
 
-## 1) What this is
-A lightweight local app (Streamlit + SQLite) that stores **Interactions** (channel-aware communication events) and shows an **Inbox** view.
+## Current Release: v0.2 — Sample Data Loader + Persistence Proof
 
-## 2) Problem & why it matters (PM framing)
-When outreach happens across channels (email today; WhatsApp/calls tomorrow), work becomes messy:
-- follow-ups get missed
-- context gets lost across tools
-- reporting becomes manual and unreliable
+### What shipped
+- A button in the app: **“Load sample emails”**
+- Seeds **3 sample email interactions** into SQLite (`app.db`)
+- Clicking again does **NOT** create duplicates  
+  (you’ll see “inserted=0, skipped=3” on the second click)
 
-ComOps is a local-first foundation to make outreach **trackable, queryable, and future-automatable**.
+### “Idempotent” in simple words
+You can click the load button multiple times, and it will **not duplicate** the same sample emails.
 
-## 3) Who it’s for
-- PR execs / agency associates
-- founders doing outbound
-- anyone managing recurring outreach + follow-ups who needs a simple system of record
+### Release notes (v0.2)
+- Added an **idempotent sample email loader** (`sample_data.py`) that inserts 3 emails once
+- Added a **Streamlit button** to load sample emails and show `inserted / skipped` counts
+- Inbox lists seeded email interactions from SQLite (`app.db`) and persists across restarts
 
-## 4) MVP scope (what’s in / what’s out)
-**In (v0.1):**
-- Streamlit app boots
-- SQLite DB auto-initializes on first run
-- Inbox page renders a table of email interactions (may be empty)
+---
 
-**Out (explicitly not in v0.1):**
-- email ingestion / Gmail integration
-- WhatsApp/call logging UI
-- task queue logic
-- analytics/reporting
-- RAG integration (not a priority right now)
-
-## 5) Key PM decision: Interaction-first engine (why)
-**Core record = Interaction, not Message.**
-
-Reason:
-- Email, WhatsApp, calls, meetings are all *interactions*.
-- Modeling by interaction makes the engine reusable across channels.
-- Prevents future refactors when PRO expands beyond email.
-
-Inbox is simply: `Interaction where channel="email"`.
-
-## 6) Tech stack
-Streamlit + SQLModel + SQLite (+ python-dotenv)
-
-## 7) How to run
+## Run locally
 ```bash
-cd ~/projects/comm-ops-os
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 
-# optional config
+# optional
 cp .env.example .env
 
-streamlit run app.py
-8) Project structure
-
-app.py — Streamlit UI shell + Inbox page
-
-models.py — SQLModel tables (Contact, Interaction, Task)
-
-db.py — engine/session helpers + auto table init
-
-app.db — local SQLite database (created on first run)
-
-9) Release Notes (v0.1 — Runnable Foundation)
-
-✅ Bootable Streamlit app with a minimal navigation shell
-
-✅ Auto-creates SQLite DB + tables on first run (app.db)
-
-✅ Inbox table renders safely even with 0 rows (refresh-safe)
-
-10) Screenshots
-
- Inbox page (empty state)
-
- DB created on first run
-
-11) Learnings (placeholder)
-
- What modeling choice reduced future refactors?
-
- What was the smallest “releasable increment” and why?
-
- What tradeoffs did we accept to stay v0.1?
+python3 -m streamlit run app.py
