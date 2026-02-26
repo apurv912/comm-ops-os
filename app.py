@@ -6,6 +6,7 @@ from sqlmodel import select
 
 import models  # important: registers SQLModel tables in metadata
 from db import init_db, get_session
+from sample_data import seed_sample_emails
 
 
 def load_inbox_rows(limit: int = 200) -> pd.DataFrame:
@@ -44,17 +45,34 @@ def render_inbox():
     st.subheader("Inbox")
     st.caption('Inbox is an "Interaction" view filtered by channel="email".')
 
+    left, right = st.columns([1, 2])
+
+    with left:
+        if st.button("Load sample emails"):
+            try:
+                res = seed_sample_emails()
+                st.session_state["last_seed"] = res
+            except Exception as e:
+                st.error(f"Failed to load sample emails: {e}")
+
+    with right:
+        if "last_seed" in st.session_state:
+            res = st.session_state["last_seed"]
+            st.info(f"Last seed run → inserted={res['inserted']} • skipped={res['skipped']}")
+        else:
+            st.caption("Tip: Click to seed 3 sample email interactions (safe to click again).")
+
     df = load_inbox_rows()
     st.dataframe(df, use_container_width=True, hide_index=True)
 
 
 def main():
-    st.set_page_config(page_title="ComOps v0", layout="wide")
+    st.set_page_config(page_title="ComOps v0.2", layout="wide")
 
-    # Ensure DB exists + tables are created on first run (AC3)
+    # Ensure DB exists + tables are created on first run
     init_db()
 
-    st.title("Communication Ops OS (ComOps) — v0.1")
+    st.title("Communication Ops OS (ComOps) — v0.2")
     st.caption("Local-first communication operations mini-OS (Interaction-first engine).")
 
     st.sidebar.header("Navigation")
