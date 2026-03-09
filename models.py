@@ -46,3 +46,25 @@ class ExtractedFields(SQLModel, table=True):
 
     # timestamp of the extraction operation
     timestamp: datetime = Field(default_factory=datetime.now, index=True)
+
+
+class Task(SQLModel, table=True):
+    """Lightweight Task entity associated (optionally) with an Interaction
+    and/or ExtractedFields. Kept minimal and SQLite-friendly.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # optional linkage to Interaction / ExtractedFields (no ORM Relationship)
+    interaction_id: Optional[int] = Field(default=None, index=True)
+    extracted_fields_id: Optional[int] = Field(default=None, index=True)
+
+    title: str = Field(default="")
+    description: Optional[str] = Field(default=None)
+
+    status: str = Field(default="open", index=True)
+    due_date: Optional[datetime] = Field(default=None)
+    priority: Optional[int] = Field(default=None)
+
+    created_at: datetime = Field(default_factory=datetime.now, index=True)
+    updated_at: datetime = Field(default_factory=datetime.now, index=True)

@@ -13,9 +13,14 @@ from db import (
     list_interactions,
     get_extracted_fields,
     upsert_extracted_fields,
+    create_task,
+    get_task_by_interaction,
+    list_tasks,
+    update_task_status,
 )
 from extraction import extract_for_interaction
 from models import Interaction
+from models import Task
 
 
 # ----------------------------
@@ -145,6 +150,55 @@ def render_inbox() -> None:
     else:
         st.info("No extracted fields yet. Run extraction to generate them.")
 
+    # Task creation area (minimal)
+    st.divider()
+    st.subheader("Task")
+
+    existing_task = None
+    if selected.id is not None:
+        existing_task = get_task_by_interaction(int(selected.id))
+
+    if existing_task:
+        st.markdown("**Existing task for this interaction:**")
+        st.markdown(f"**Title:** {existing_task.title}")
+        st.markdown(f"**Status:** {existing_task.status}")
+        st.markdown(f"**Created At:** {existing_task.created_at}")
+        if existing_task.description:
+            st.markdown(f"**Description:** {existing_task.description}")
+    else:
+        # Only allow task creation if we have extracted fields to base it on
+        if not current_extracted:
+            st.info("No extracted context — run extraction first to create a task.")
+        else:
+            if st.button("Create Task"):
+                # build a simple default task payload
+                title = (current_extracted.suggested_action or current_extracted.intent or "Follow up")
+                desc_parts = []
+                if current_extracted.summary:
+                    desc_parts.append(current_extracted.summary)
+                if current_extracted.suggested_action:
+                    desc_parts.append(current_extracted.suggested_action)
+                description = "\n\n".join(desc_parts) if desc_parts else None
+
+                task = Task(
+                    interaction_id=int(selected.id),
+                    extracted_fields_id=getattr(current_extracted, "id", None),
+                    title=title,
+                    description=description,
+                    status="open",
+                )
+
+                try:
+                    created_task = create_task(task)
+                except Exception as e:
+                    st.error(f"Failed to create task: {e}")
+                else:
+                    st.success(f"Created task id={created_task.id}")
+                    st.markdown(f"**Title:** {created_task.title}")
+                    st.markdown(f"**Status:** {created_task.status}")
+                    if created_task.description:
+                        st.markdown(f"**Description:** {created_task.description}")
+
 
 def render_add_interaction() -> None:
     st.title("Add Interaction")
@@ -208,6 +262,53 @@ def render_about() -> None:
     )
 
 
+def render_tasks() -> None:
+    st.title("Task Queue")
+    st.caption("Lightweight task list (Session 5)")
+
+    tasks = list_tasks()
+    st.write(f"Total tasks: **{len(tasks)}**")
+
+    if not tasks:
+        st.info("No tasks yet. Create one from an Interaction detail view.")
+        return
+
+    for t in tasks:
+        header = f"{t.title or '(no title)'} — {t.status}"
+        with st.expander(header):
+            st.markdown(f"**ID:** {t.id}")
+            st.markdown(f"**Interaction ID:** {t.interaction_id}")
+            st.markdown(f"**Status:** {t.status}")
+            due = "No due date"
+            if getattr(t, "due_date", None):
+                try:
+                    due = t.due_date.strftime("%Y-%m-%d %H:%M")
+                except Exception:
+                    due = str(t.due_date)
+            st.markdown(f"**Due:** {due}")
+            if getattr(t, "created_at", None):
+                st.markdown(f"**Created At:** {t.created_at}")
+            if t.description:
+                st.markdown("**Description:**")
+                st.write(t.description)
+
+            # Lightweight status update control
+            options = ["open", "in_progress", "done"]
+            try:
+                default_idx = options.index(t.status)
+            except Exception:
+                default_idx = 0
+
+            new_status = st.selectbox("Update status", options=options, index=default_idx, key=f"status_{t.id}")
+            if st.button("Apply", key=f"apply_{t.id}"):
+                try:
+                    updated = update_task_status(t.id, new_status)
+                except Exception as e:
+                    st.error(f"Failed to update status: {e}")
+                else:
+                    st.success(f"Updated task status to {updated.status}")
+
+
 # ----------------------------
 # App
 # ----------------------------
@@ -221,12 +322,14 @@ def main() -> None:
 
     page = st.sidebar.radio(
         "Navigation",
-        options=["Inbox", "Add Interaction", "About / Roadmap"],
+        options=["Inbox", "Task Queue", "Add Interaction", "About / Roadmap"],
         key="nav_page",
     )
 
     if page == "Inbox":
         render_inbox()
+    elif page == "Task Queue":
+        render_tasks()
     elif page == "Add Interaction":
         render_add_interaction()
     else:

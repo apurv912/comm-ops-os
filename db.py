@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy import func, text
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from models import Interaction, ExtractedFields
+from models import Interaction, ExtractedFields, Task
 
 DB_URL = "sqlite:///app.db"
 engine = create_engine(
@@ -36,6 +36,43 @@ def migrate_db() -> None:
             conn.execute(text("ALTER TABLE interaction ADD COLUMN contact_name TEXT"))
         if "contact_email" not in cols:
             conn.execute(text("ALTER TABLE interaction ADD COLUMN contact_email TEXT"))
+
+
+def repair_task_table() -> None:
+    """Lightweight SQLite repair for the `task` table.
+
+    Checks existing columns and adds any missing columns required by the
+    current `Task` model using safe `ALTER TABLE ... ADD COLUMN` statements.
+    Does nothing if the table does not exist yet.
+    """
+    # Full expected Task schema (simple SQLite types). Note: adding
+    # an `id` column via ALTER TABLE will not retroactively make it a
+    # PRIMARY KEY in existing tables, but we add it here for schema
+    # compatibility in simple cases where the column is missing.
+    expected = {
+        "id": "INTEGER",
+        "interaction_id": "INTEGER",
+        "extracted_fields_id": "INTEGER",
+        "title": "TEXT",
+        "description": "TEXT",
+        "status": "TEXT",
+        "due_date": "TEXT",
+        "priority": "INTEGER",
+        "created_at": "TEXT",
+        "updated_at": "TEXT",
+    }
+
+    with engine.connect() as conn:
+        res = conn.execute(text("PRAGMA table_info('task')"))
+        rows = res.fetchall()
+        if not rows:
+            return
+        existing_cols = {row[1] for row in rows}
+
+    with engine.begin() as conn:
+        for col, sql_type in expected.items():
+            if col not in existing_cols:
+                conn.execute(text(f"ALTER TABLE task ADD COLUMN {col} {sql_type}"))
 
 
 def seed_db_if_empty() -> None:
@@ -70,6 +107,7 @@ def ensure_db() -> None:
     """Call once at app start: ensures schema + seed data."""
     init_db()
     migrate_db()
+    repair_task_table()
     seed_db_if_empty()
 
 
@@ -138,3 +176,49 @@ def upsert_extracted_fields(extracted: ExtractedFields) -> ExtractedFields:
         session.commit()
         session.refresh(extracted)
         return extracted
+
+
+def create_task(task: Task) -> Task:
+    """Insert one Task and return it refreshed (with id)."""
+    with Session(engine) as session:
+        session.add(task)
+        session.commit()
+        session.refresh(task)
+        return task
+
+
+def list_tasks() -> List[Task]:
+    """Return all tasks, newest first by created_at."""
+    with Session(engine) as session:
+        stmt = select(Task).order_by(Task.created_at.desc())
+        return list(session.exec(stmt).all())
+
+
+def get_task(task_id: int) -> Optional[Task]:
+    """Fetch one task by id."""
+    with Session(engine) as session:
+        return session.get(Task, task_id)
+
+
+def get_task_by_interaction(interaction_id: int) -> Optional[Task]:
+    """Return the first Task associated with an interaction, or None."""
+    with Session(engine) as session:
+        stmt = select(Task).where(Task.interaction_id == interaction_id)
+        return session.exec(stmt).first()
+
+
+def update_task_status(task_id: int, status: str) -> Task:
+    """Update the status (and updated_at) of a task and return it.
+
+    Raises `ValueError` if task not found.
+    """
+    with Session(engine) as session:
+        task = session.get(Task, task_id)
+        if not task:
+            raise ValueError(f"Task id={task_id} not found")
+        task.status = status
+        task.updated_at = datetime.now()
+        session.add(task)
+        session.commit()
+        session.refresh(task)
+        return task
