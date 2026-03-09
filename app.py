@@ -18,9 +18,10 @@ from db import (
     list_tasks,
     update_task_status,
 )
+from db import create_template, list_templates
 from extraction import extract_for_interaction
 from models import Interaction
-from models import Task
+from models import Task, Template
 
 
 # ----------------------------
@@ -92,6 +93,9 @@ def render_inbox() -> None:
     if not selected:
         st.error("Could not load the selected interaction.")
         return
+    
+    # Extraction area
+    st.divider()
 
     st.subheader("Detail View")
 
@@ -165,6 +169,58 @@ def render_inbox() -> None:
         st.markdown(f"**Created At:** {existing_task.created_at}")
         if existing_task.description:
             st.markdown(f"**Description:** {existing_task.description}")
+    
+    # ----------------------------
+    # Template preview / compose helper (local-only)
+    # ----------------------------
+    st.divider()
+    st.subheader("Template-based Preview (local only)")
+    
+    try:
+        templates = list_templates()
+    except Exception:
+        templates = []
+    
+    if not templates:
+        st.info("No templates saved. Create one from the Templates page.")
+        return
+    
+    # Map to friendly labels: "id | name"
+    tpl_options = [f"{t.id} | {t.name or '(untitled)'}" for t in templates]
+    tpl_choice = st.selectbox("Choose a saved template (preview only)", options=["<none>"] + tpl_options, index=0)
+    
+    if tpl_choice and not tpl_choice.startswith("<none>"):
+        try:
+            tpl_id = int(tpl_choice.split("|", 1)[0].strip())
+        except Exception:
+            st.error("Failed to parse selected template")
+            return
+        tpl_map = {t.id: t for t in templates}
+        tpl = tpl_map.get(tpl_id)
+        if not tpl:
+            st.error("Template not found")
+            return
+    
+        st.markdown(f"**Template:** {tpl.name or '(untitled)'} — {tpl.channel or 'N/A'}")
+        st.markdown("**This is a local preview only. This app does not send messages.**")
+    
+        # Small context hint: prefer extracted summary, fallback to interaction subject
+        ctx_snippet = None
+        if current_extracted and getattr(current_extracted, "summary", None):
+            ctx_snippet = current_extracted.summary
+        elif getattr(selected, "subject", None):
+            ctx_snippet = (selected.subject or "")
+    
+        if ctx_snippet:
+            st.markdown("**Local context (for reference):**")
+            st.write(ctx_snippet)
+    
+        # Preview fields (read-only) so user sees exactly what would be used
+        st.markdown("**Subject Preview**")
+        st.text_input("", value=tpl.subject or "", disabled=True, key=f"tpl_subj_{tpl.id}")
+    
+        st.markdown("**Body Preview**")
+        st.text_area("", value=tpl.body or "", disabled=True, height=220, key=f"tpl_body_{tpl.id}")
     else:
         # Only allow task creation if we have extracted fields to base it on
         if not current_extracted:
@@ -309,6 +365,60 @@ def render_tasks() -> None:
                     st.success(f"Updated task status to {updated.status}")
 
 
+def render_templates() -> None:
+    st.title("Templates")
+    st.caption("Create and view stored templates (Session 6)")
+
+    with st.form("create_template_form", clear_on_submit=False):
+        name = st.text_input("Name", value="")
+        channel = st.selectbox("Channel", options=["", "email", "whatsapp", "call"], index=0)
+        template_type = st.text_input("Type (optional)", value="")
+        subject = st.text_input("Subject", value="")
+        body = st.text_area("Body", value="", height=200)
+
+        submitted = st.form_submit_button("Create Template")
+
+    if submitted:
+        tpl = Template(
+            name=(name or "").strip(),
+            channel=(channel or None) if channel else None,
+            template_type=(template_type or None) if template_type else None,
+            subject=(subject or None) if subject else None,
+            body=(body or None) if body else None,
+        )
+
+        try:
+            created = create_template(tpl)
+        except Exception as e:
+            st.error(f"Failed to create template: {e}")
+        else:
+            st.success(f"Created template id={created.id}")
+
+    st.divider()
+    st.subheader("Saved Templates")
+
+    templates = list_templates()
+    st.write(f"Total templates: **{len(templates)}**")
+
+    if not templates:
+        st.info("No templates yet. Create one using the form above.")
+        return
+
+    for t in templates:
+        header = f"{t.name or '(untitled)'} — {t.channel or 'N/A'}"
+        with st.expander(header):
+            st.markdown(f"**ID:** {t.id}")
+            if t.template_type:
+                st.markdown(f"**Type:** {t.template_type}")
+            if t.subject:
+                st.markdown(f"**Subject:** {t.subject}")
+            if t.body:
+                st.markdown("**Body:**")
+                st.write(t.body)
+            if getattr(t, "created_at", None):
+                st.markdown(f"**Created At:** {t.created_at}")
+
+
 # ----------------------------
 # App
 # ----------------------------
@@ -322,7 +432,7 @@ def main() -> None:
 
     page = st.sidebar.radio(
         "Navigation",
-        options=["Inbox", "Task Queue", "Add Interaction", "About / Roadmap"],
+        options=["Inbox", "Task Queue", "Templates", "Add Interaction", "About / Roadmap"],
         key="nav_page",
     )
 
@@ -330,6 +440,8 @@ def main() -> None:
         render_inbox()
     elif page == "Task Queue":
         render_tasks()
+    elif page == "Templates":
+        render_templates()
     elif page == "Add Interaction":
         render_add_interaction()
     else:

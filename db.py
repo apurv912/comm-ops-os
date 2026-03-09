@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy import func, text
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from models import Interaction, ExtractedFields, Task
+from models import Interaction, ExtractedFields, Task, Template
 
 DB_URL = "sqlite:///app.db"
 engine = create_engine(
@@ -75,6 +75,36 @@ def repair_task_table() -> None:
                 conn.execute(text(f"ALTER TABLE task ADD COLUMN {col} {sql_type}"))
 
 
+def repair_template_table() -> None:
+    """Lightweight SQLite repair for the `template` table.
+
+    Adds any missing columns required by the current `Template` model.
+    Does nothing if the table does not exist yet.
+    """
+    expected = {
+        "id": "INTEGER",
+        "name": "TEXT",
+        "channel": "TEXT",
+        "template_type": "TEXT",
+        "subject": "TEXT",
+        "body": "TEXT",
+        "created_at": "TEXT",
+        "updated_at": "TEXT",
+    }
+
+    with engine.connect() as conn:
+        res = conn.execute(text("PRAGMA table_info('template')"))
+        rows = res.fetchall()
+        if not rows:
+            return
+        existing_cols = {row[1] for row in rows}
+
+    with engine.begin() as conn:
+        for col, sql_type in expected.items():
+            if col not in existing_cols:
+                conn.execute(text(f"ALTER TABLE template ADD COLUMN {col} {sql_type}"))
+
+
 def seed_db_if_empty() -> None:
     """Seed minimal sample data only if DB is empty (so we don't duplicate)."""
     with Session(engine) as session:
@@ -108,6 +138,7 @@ def ensure_db() -> None:
     init_db()
     migrate_db()
     repair_task_table()
+    repair_template_table()
     seed_db_if_empty()
 
 
@@ -222,3 +253,47 @@ def update_task_status(task_id: int, status: str) -> Task:
         session.commit()
         session.refresh(task)
         return task
+
+
+def create_template(template: Template) -> Template:
+    """Insert one Template and return it refreshed (with id)."""
+    with Session(engine) as session:
+        session.add(template)
+        session.commit()
+        session.refresh(template)
+        return template
+
+
+def list_templates() -> List[Template]:
+    """Return all templates, newest first by created_at."""
+    with Session(engine) as session:
+        stmt = select(Template).order_by(Template.created_at.desc())
+        return list(session.exec(stmt).all())
+
+
+def get_template(template_id: int) -> Optional[Template]:
+    """Fetch one template by id."""
+    with Session(engine) as session:
+        return session.get(Template, template_id)
+
+
+def update_template(template: Template) -> Template:
+    """Update an existing Template (must have id) and return it."""
+    if not getattr(template, "id", None):
+        raise ValueError("template.id must be provided for update")
+    with Session(engine) as session:
+        existing = session.get(Template, template.id)
+        if not existing:
+            raise ValueError(f"Template id={template.id} not found")
+
+        existing.name = template.name
+        existing.channel = template.channel
+        existing.template_type = template.template_type
+        existing.subject = template.subject
+        existing.body = template.body
+        existing.updated_at = datetime.now()
+
+        session.add(existing)
+        session.commit()
+        session.refresh(existing)
+        return existing

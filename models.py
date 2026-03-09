@@ -68,3 +68,23 @@ class Task(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=datetime.now, index=True)
     updated_at: datetime = Field(default_factory=datetime.now, index=True)
+
+
+class Template(SQLModel, table=True):
+    """Persistent templates for outreach messages. Kept minimal for v0.6 work.
+
+    Note: Session 6 focuses on the persistent Template data layer only; no UI
+    or sending logic is added here yet.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    name: str = Field(default="")
+    channel: Optional[str] = Field(default=None)
+    template_type: Optional[str] = Field(default=None)
+
+    subject: Optional[str] = Field(default=None)
+    body: Optional[str] = Field(default=None)
+
+    created_at: datetime = Field(default_factory=datetime.now, index=True)
+    updated_at: datetime = Field(default_factory=datetime.now, index=True)
