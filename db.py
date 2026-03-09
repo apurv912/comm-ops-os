@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy import func, text
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from models import Interaction
+from models import Interaction, ExtractedFields
 
 DB_URL = "sqlite:///app.db"
 engine = create_engine(
@@ -96,3 +96,45 @@ def get_interaction(interaction_id: int) -> Optional[Interaction]:
     """Fetch one interaction by id."""
     with Session(engine) as session:
         return session.get(Interaction, interaction_id)
+
+
+def get_extracted_fields(interaction_id: int) -> Optional[ExtractedFields]:
+    """Return the ExtractedFields row for the given interaction_id, or None."""
+    with Session(engine) as session:
+        stmt = select(ExtractedFields).where(ExtractedFields.interaction_id == interaction_id)
+        return session.exec(stmt).first()
+
+
+def upsert_extracted_fields(extracted: ExtractedFields) -> ExtractedFields:
+    """Insert or update the ExtractedFields row for an interaction.
+
+    If a row exists for `extracted.interaction_id`, update its fields.
+    Otherwise insert a new row. Commit, refresh, and return the saved row.
+    """
+    if not getattr(extracted, "interaction_id", None) or extracted.interaction_id <= 0:
+        raise ValueError("extracted.interaction_id must be a positive int")
+
+    with Session(engine) as session:
+        # find existing by interaction_id
+        stmt = select(ExtractedFields).where(ExtractedFields.interaction_id == extracted.interaction_id)
+        existing = session.exec(stmt).first()
+
+        if existing:
+            # update allowed fields
+            existing.summary = extracted.summary
+            existing.intent = extracted.intent
+            existing.suggested_action = extracted.suggested_action
+            existing.confidence = extracted.confidence
+            existing.warnings = extracted.warnings
+            existing.timestamp = extracted.timestamp
+
+            session.add(existing)
+            session.commit()
+            session.refresh(existing)
+            return existing
+
+        # insert new
+        session.add(extracted)
+        session.commit()
+        session.refresh(extracted)
+        return extracted

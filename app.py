@@ -7,7 +7,14 @@ from typing import Dict, List
 
 import streamlit as st
 
-from db import create_interaction, ensure_db, list_interactions
+from db import (
+    create_interaction,
+    ensure_db,
+    list_interactions,
+    get_extracted_fields,
+    upsert_extracted_fields,
+)
+from extraction import extract_for_interaction
 from models import Interaction
 
 
@@ -101,6 +108,42 @@ def render_inbox() -> None:
         disabled=True,
         label_visibility="collapsed",
     )
+
+    # Extraction area
+    st.divider()
+    st.subheader("Extraction")
+
+    # Load existing extracted fields if present into a single variable
+    current_extracted = None
+    if selected.id is not None:
+        current_extracted = get_extracted_fields(int(selected.id))
+
+    run_pressed = st.button("Run extraction")
+    if run_pressed:
+        if not selected.id or int(selected.id) <= 0:
+            st.error("Cannot extract: selected interaction has no valid id.")
+        else:
+            extracted = extract_for_interaction(selected)
+            try:
+                saved = upsert_extracted_fields(extracted)
+            except Exception as e:
+                st.error(f"Failed to save extracted fields: {e}")
+            else:
+                st.success(f"Saved extracted fields (id={saved.id})")
+                # update the single source of truth for rendering
+                current_extracted = saved
+
+    # Render extracted fields once (either existing or newly saved)
+    if current_extracted:
+        st.markdown("**Extracted fields:**")
+        st.markdown(f"**Summary:** {current_extracted.summary or ''}")
+        st.markdown(f"**Intent:** {current_extracted.intent or ''}")
+        st.markdown(f"**Suggested Action:** {current_extracted.suggested_action or ''}")
+        st.markdown(f"**Confidence:** {current_extracted.confidence}")
+        st.markdown(f"**Warnings:** {(current_extracted.warnings or 'None')}")
+        st.markdown(f"**Extracted At:** {current_extracted.timestamp}")
+    else:
+        st.info("No extracted fields yet. Run extraction to generate them.")
 
 
 def render_add_interaction() -> None:
